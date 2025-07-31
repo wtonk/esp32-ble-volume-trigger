@@ -1,0 +1,10 @@
+# ESP-IDF build output
+build/
+
+# ESP-IDF configuration files
+sdkconfig
+sdkconfig.old
+
+# VSCode settings
+.vscode/
+
