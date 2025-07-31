@@ -3,7 +3,7 @@
  *
  * SPDX-License-Identifier: Unlicense OR CC0-1.0
  */
-
+extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +26,8 @@
 #include "esp_bt_device.h"
 #include "driver/gpio.h"
 #include "hid_dev.h"
+}
+#include "M5Unified.h"
 
 /**
  * Brief:
@@ -51,7 +53,6 @@
 
 static uint16_t hid_conn_id = 0;
 static bool sec_conn = false;
-static bool send_volum_up = false;
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param);
@@ -178,10 +179,25 @@ void hid_demo_task(void *pvParameters)
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     int last_state = 1; // Assume button is not pressed initially
+    int display_counter = 0;
     while(1) {
+        if(display_counter == 0) {
+            float voltage = M5.Power.getBatteryVoltage();
+            M5.Display.fillRect(0, 0, 320, 40, 0x0000); // Clear area
+            M5.Display.setCursor(10, 10);
+            M5.Display.printf("Voltage: %.2f V", voltage);
+            M5.Display.setCursor(10, 30);
+            if (sec_conn) {
+                M5.Display.print("BLE: Connected");
+            } else {
+                M5.Display.print("BLE: Disconnected");
+            }
+        }
+        display_counter = (display_counter + 1) % 50;
+
         vTaskDelay(200 / portTICK_PERIOD_MS);
         if (sec_conn) {
-            int state = gpio_get_level(37);
+            int state = gpio_get_level((gpio_num_t)37);
             if (last_state == 1 && state == 0) {
                 // Button pressed
                 ESP_LOGI(HID_DEMO_TAG, "Button pressed, sending volume up");
@@ -192,14 +208,15 @@ void hid_demo_task(void *pvParameters)
                 esp_hidd_send_consumer_value(hid_conn_id, HID_CONSUMER_VOLUME_UP, false);
             }
             last_state = state;
-            vTaskDelay(10 / portTICK_PERIOD_MS);
         }
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
 
-void app_main(void)
+extern "C" void app_main(void)
 {
+    ESP_LOGI(HID_DEMO_TAG, "Device booted!");
     esp_err_t ret;
 
     // Initialize NVS.
@@ -260,6 +277,12 @@ void app_main(void)
     and the init key means which key you can distribute to the slave. */
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
+
+    M5.begin();
+    M5.Display.setTextSize(2);
+    M5.Display.setTextColor(0x07E0);
+    M5.Display.setCursor(10, 10);
+    M5.Display.print("Starting...");
 
     xTaskCreate(&hid_demo_task, "hid_task", 2048, NULL, 5, NULL);
 }
